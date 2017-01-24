@@ -1,0 +1,20 @@
+{
+  "name": "yell-ow",
+  "version": "0.1.1",
+  "description": "a seed harvest toolset",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "��https://github.com/sleep2death/yell-ow"
+  },
+  "keywords": [
+    "seeds",
+    "torrent",
+    "porn"
+  ],
+  "author": "aspirin2d",
+  "license": "ISC"
+}
