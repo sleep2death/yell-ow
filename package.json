@@ -19,6 +19,7 @@
     "space": true,
     "semicolon": false,
     "rules": {
+      "no-return-assign": 0,
       "curly": 0,
       "keyword-spacing": 0,
       "guard-for-in": 0
@@ -33,5 +34,12 @@
     "porn"
   ],
   "author": "aspirin2d",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "async": "^2.1.4",
+    "chalk": "^1.1.3",
+    "iconv-lite": "^0.4.15",
+    "parse-torrent": "^5.8.1",
+    "request": "^2.79.0"
+  }
 }
