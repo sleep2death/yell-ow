@@ -3,6 +3,7 @@ const async = require('async')
 const parseTorrent = require('parse-torrent')
 const chalk = require('chalk')
 const iconv = require('iconv-lite')
+const fs = require('fs')
 
 const headers = {
   USER_AGENT: 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.87 Safari/537.36',
@@ -11,15 +12,16 @@ const headers = {
   ACCEPT: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
 }
 
-request({headers, url: 'http://www.t66y.com/thread0806.php?fid=15'}, (error, response, body) => {
+request({headers, encoding: null, url: 'http://www.t66y.com/thread0806.php?fid=15'}, (error, response, body) => {
   if(!error && response.statusCode === 200) {
-    parse(body)
+    parse(iconv.decode(body, 'gb2312'))
   }
 })
 
 function parse(body) {
   const REG = new RegExp(/<h3><a href="(htm_data.+?)".+?>(.+)<\/a>/g)
   const list = []
+  const result = []
   let res = null
 
   while((res = REG.exec(body)) !== null) {
@@ -27,12 +29,19 @@ function parse(body) {
   }
 
   async.eachSeries(list, (item, callback) => {
-    console.log(item.title, item.path)
-    waterfall(`http://www.t66y.com/${item.path}`, callback)
+    console.log(chalk.green.bold(item.title))
+    waterfall(result, item, callback)
+  }, error => {
+    const finalStr = result.join('\n')
+    fs.writeFile('./result.txt', result.join('\n'), error => {
+      if(error) throw error
+      console.log('done')
+    })
   })
 }
 
-function waterfall(url, callback) {
+function waterfall(result, item, callback) {
+  const url = `http://www.t66y.com/${item.path}`
   async.waterfall([
     cb => {
       request({headers, url}, (error, response, page) => {
@@ -66,16 +75,30 @@ function waterfall(url, callback) {
     },
     (ref, reff, cb) => {
       const url = `http://www.rmdown.com/download.php?ref=${ref}&reff=${encodeURIComponent(reff)}&submit=download`
+      /* const ws = fs.createWriteStream(`./data/${item.title}.torrent`)
+      request.get(url, headers)
+      .on('error', error => {
+        return cb(`invalid torrent file in ${url}: ${error}`)
+      })
+      .pipe(ws)
+      ws.on('close', error => {
+        console.log('downloaded')
+        cb()
+        }) */
       parseTorrent.remote(url, (error, parsedTorrent) => {
         if(error || !parsedTorrent) {
           return cb(`invalid torrent file in ${url}: ${error}`)
         }
-        cb(null, parsedTorrent)
+        cb(null, parseTorrent.toMagnetURI(parsedTorrent))
       })
+    },
+    (magnet, cb) => {
+      // magnet = magnet.replace(/&dn=(.+?)&/g, `&dn=${item.title}&`)
+      cb(null, magnet)
     }
-  ], (error, parsedTorrent) => {
-    if(parsedTorrent) console.log(parsedTorrent.infoHash)
+  ], (error, magnet) => {
     if(error) console.log(chalk.red(error))
+    if(magnet) result.push(magnet)
     callback()
   })
 }
