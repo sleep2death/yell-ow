@@ -1,3 +1,5 @@
 data/
 node_modules/
 .editorconfig
+*.txt
+.DS_Store
