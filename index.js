@@ -1,10 +1,11 @@
 const fs = require('fs')
+const readline = require('readline')
 const request = require('request')
 const async = require('async')
 const parseTorrent = require('parse-torrent')
-const chalk = require('chalk')
 const iconv = require('iconv-lite')
-const Progress = require('progress')
+
+const getPages = require('./page')
 
 const spinners = [
   '|/-\\',
@@ -38,6 +39,7 @@ const spinners = [
   '⠁⠂⠄⡀⢀⠠⠐⠈',
   '🌑🌒🌓🌔🌕🌝🌖🌗🌘🌚'
 ]
+
 const spinner = spinners[19]
 let sCount = 0
 const sLength = spinner.length
@@ -49,45 +51,33 @@ const headers = {
   ACCEPT: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
 }
 
-request({headers, encoding: null, url: 'http://www.t66y.com/thread0806.php?fid=15', timeout: 5000}, (error, response, body) => {
-  if(!error && response.statusCode === 200) {
-    parse(iconv.decode(body, 'gb2312'))
-  }else{
-    console.log(chalk.bold.red('Oops, can\'t reach www.t66y.com, please check your network or vpn settings.'))
-  }
-})
-
-function parse(body) {
-  const REG = new RegExp(/<h3><a href="(htm_data.+?)".+?>(.+)<\/a>/g)
-  const list = []
+getPages('http://www.t66y.com/thread0806.php?fid=15&page=', {count: 1, pages: 5}, list => {
   const result = []
-  let res = null
-
-  while((res = REG.exec(body)) !== null) {
-    if(list.indexOf(res) < 0) list.push({path: res[1], title: res[2]})
-  }
-  const bar = new Progress('processing [:bar] :spinner :title', {width: 30, total: list.length})
-
   async.eachSeries(list, (item, callback) => {
-    // console.log(chalk.green.bold(item.title))
-    waterfall(result, item, bar, callback)
+    waterfall(result, item, callback)
   }, () => {
     fs.writeFile('./result.txt', result.join('\n\n'), error => {
       if(error) throw error
-      console.log('done')
+
+      readline.clearLine(process.stdout, 0)
+      readline.cursorTo(process.stdout, 0, null)
+      process.stdout.write('ALL DONE')
     })
   })
-}
+})
 
-function waterfall(result, item, bar, callback) {
+function waterfall(result, item, callback) {
   const url = `http://www.t66y.com/${item.path}`
+
   const timer = setInterval(() => {
-    bar.tick(0, {spinner: chalk.yellow(getSpinner()), title: item.title})
+    readline.clearLine(process.stdout, 0)
+    readline.cursorTo(process.stdout, 0, null)
+    process.stdout.write(`${getSpinner()} processing ${item.title}`)
   }, 200)
 
   async.waterfall([
     cb => {
-      request({headers, url}, (error, response, page) => {
+      request({headers, url, timeout: 5000}, (error, response, page) => {
         if(!error && response.statusCode === 200) {
           const reg = new RegExp(/http:\/\/www\.viidii\.info\/\?http:\/\/www______rmdown______com\/link______php\?hash=([0-9a-z]+)/g)
           const res = reg.exec(page)
@@ -102,7 +92,7 @@ function waterfall(result, item, bar, callback) {
       })
     },
     (torrentInfoPage, cb) => {
-      request({headers, url: torrentInfoPage}, (error, response, page) => {
+      request({headers, url: torrentInfoPage, timeout: 5000}, (error, response, page) => {
         if(!error && response.statusCode === 200) {
           const reg = new RegExp(/name="ref" value="([a-z0-9]+)".+NAME="reff" value="(.+)"+/g)
           const res = reg.exec(page)
@@ -118,6 +108,12 @@ function waterfall(result, item, bar, callback) {
     },
     (ref, reff, cb) => {
       const url = `http://www.rmdown.com/download.php?ref=${ref}&reff=${encodeURIComponent(reff)}&submit=download`
+
+      request({headers, urltimeout: 5000, url}).on('response', res => {
+        const fws = fs.createWriteStream(`${item.title}.torrent`)
+        res.pipe(fws)
+      })
+
       parseTorrent.remote(url, (error, parsedTorrent) => {
         if(error || !parsedTorrent) {
           return cb(`invalid torrent file in ${url}: ${error}`)
@@ -132,7 +128,6 @@ function waterfall(result, item, bar, callback) {
   ], (error, magnet) => {
     if(magnet) result.push(magnet)
 
-    bar.tick(1, {spinner: error ? chalk.red(getSpinner()) : chalk.green(getSpinner()), title: item.title})
     clearInterval(timer)
     callback()
   })
